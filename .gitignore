@@ -267,6 +267,7 @@ paket-files/
 __pycache__/
 *.pyc
 
-
 .[Cc]langd*
 compile_commands.json
+fluid_sim
+events.txt
