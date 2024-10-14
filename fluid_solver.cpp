@@ -143,9 +143,9 @@ void advect(int M, int N, int O, int b, float *d, float *d0, float *u, float *v,
 // Projection step to ensure incompressibility (make the velocity field
 // divergence-free)
 void project(int M, int N, int O, float *u, float *v, float *w, float *p, float *div) {
-    for (int i = 1; i <= M; i++) {
+    for (int k = 1; k <= O; k++) {
         for (int j = 1; j <= N; j++) {
-            for (int k = 1; k <= O; k++) {
+            for (int i = 1; i <= M; i++) {
                 div[IX(i, j, k)] =
                         -0.5f *
                         (u[IX(i + 1, j, k)] - u[IX(i - 1, j, k)] + v[IX(i, j + 1, k)] -
@@ -160,9 +160,9 @@ void project(int M, int N, int O, float *u, float *v, float *w, float *p, float 
     set_bnd(M, N, O, 0, p);
     lin_solve(M, N, O, 0, p, div, 1, 6);
 
-    for (int i = 1; i <= M; i++) {
+    for (int k = 1; k <= O; k++) {
         for (int j = 1; j <= N; j++) {
-            for (int k = 1; k <= O; k++) {
+            for (int i = 1; i <= M; i++) {
                 u[IX(i, j, k)] -= 0.5f * (p[IX(i + 1, j, k)] - p[IX(i - 1, j, k)]);
                 v[IX(i, j, k)] -= 0.5f * (p[IX(i, j + 1, k)] - p[IX(i, j - 1, k)]);
                 w[IX(i, j, k)] -= 0.5f * (p[IX(i, j, k + 1)] - p[IX(i, j, k - 1)]);
