@@ -1,6 +1,6 @@
 CPP = g++ -Wall -std=c++11
 SRCS = main.cpp fluid_solver.cpp EventManager.cpp
-CFLAGS = -O3 -funroll-loops -msse4
+CFLAGS = -O3 -funroll-loops -msse4 -mavx -fno-strict-aliasing
 
 all:
 	$(CPP) $(CFLAGS) $(SRCS) -o fluid_sim -lm
