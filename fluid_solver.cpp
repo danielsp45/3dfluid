@@ -9,6 +9,7 @@
     x = tmp;                                                                   \
   }
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define LINEARSOLVERTIMES 20
 
 // Add sources (density or velocity)
@@ -116,18 +117,9 @@ void advect(int M, int N, int O, int b, float *d, float *d0, float *u, float *v,
                 float z = k - dtZ * w[IX(i, j, k)];
 
                 // Clamp to grid boundaries
-                if (x < 0.5f)
-                    x = 0.5f;
-                if (x > M + 0.5f)
-                    x = M + 0.5f;
-                if (y < 0.5f)
-                    y = 0.5f;
-                if (y > N + 0.5f)
-                    y = N + 0.5f;
-                if (z < 0.5f)
-                    z = 0.5f;
-                if (z > O + 0.5f)
-                    z = O + 0.5f;
+                x = MAX(0.5f, MIN(M + 0.5f, x));
+                y = MAX(0.5f, MIN(N + 0.5f, y));
+                z = MAX(0.5f, MIN(O + 0.5f, z));
 
                 int i0 = (int) x, i1 = i0 + 1;
                 int j0 = (int) y, j1 = j0 + 1;
