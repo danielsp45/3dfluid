@@ -198,9 +198,9 @@ void project(int M, int N, int O, float *u, float *v, float *w, float *p, float 
 // Step function for density
 void dens_step(int M, int N, int O, float *x, float *x0, float *u, float *v, float *w, float diff, float dt) {
     add_source(M, N, O, x, x0, dt);
-    SWAP(x0, x);
-    diffuse(M, N, O, 0, x, x0, diff, dt);
-    SWAP(x0, x);
+    // SWAP(x0, x);
+    diffuse(M, N, O, 0, x0, x, diff, dt);
+    // SWAP(x0, x);
     advect(M, N, O, 0, x, x0, u, v, w, dt);
 }
 
@@ -210,16 +210,16 @@ void vel_step(int M, int N, int O, float *u, float *v, float *w, float *u0,
     add_source(M, N, O, u, u0, dt);
     add_source(M, N, O, v, v0, dt);
     add_source(M, N, O, w, w0, dt);
-    SWAP(u0, u);
-    diffuse(M, N, O, 1, u, u0, visc, dt);
-    SWAP(v0, v);
-    diffuse(M, N, O, 2, v, v0, visc, dt);
-    SWAP(w0, w);
-    diffuse(M, N, O, 3, w, w0, visc, dt);
-    project(M, N, O, u, v, w, u0, v0);
-    SWAP(u0, u);
-    SWAP(v0, v);
-    SWAP(w0, w);
+    // SWAP(u0, u);
+    diffuse(M, N, O, 1, u0, u, visc, dt);
+    // SWAP(v0, v);
+    diffuse(M, N, O, 2, v0, v, visc, dt);
+    // SWAP(w0, w);
+    diffuse(M, N, O, 3, w0, w, visc, dt);
+    project(M, N, O, u0, v0, w0, u, v);
+    // SWAP(u0, u);
+    // SWAP(v0, v);
+    // SWAP(w0, w);
     advect(M, N, O, 1, u, u0, u0, v0, w0, dt);
     advect(M, N, O, 2, v, v0, u0, v0, w0, dt);
     advect(M, N, O, 3, w, w0, u0, v0, w0, dt);
