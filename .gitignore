@@ -274,3 +274,4 @@ events.txt
 output.*
 prof_md
 main.gprof
+fluid_solver.s
