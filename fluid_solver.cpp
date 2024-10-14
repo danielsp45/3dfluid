@@ -84,6 +84,7 @@ void set_bnd(int M, int N, int O, int b, float *x) {
 void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c) {
     float cRecip = 1.0f / c;
     float cTimesA = a * cRecip;
+    float threshold = 0.0f;
 
     int size = (M + 2) * (N + 2) * (O + 2);
     float* x1 = new float[size];
@@ -100,14 +101,19 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
         for (int k = 1; k <= O; k++) {
             for (int j = 1; j <= N; j++) {
                 for (int i = 1; i <= M; i++) {
-                    x[IX(i, j, k)] = x1[IX(i, j, k)] + (x[IX(i - 1, j, k)] + x[IX(i + 1, j, k)] +
+                    float cur = x1[IX(i, j, k)] + (x[IX(i - 1, j, k)] + x[IX(i + 1, j, k)] +
                                            x[IX(i, j - 1, k)] + x[IX(i, j + 1, k)] +
                                            x[IX(i, j, k - 1)] + x[IX(i, j, k + 1)]) * cTimesA;
 
+                    float diff = cur - x1[IX(i, j, k)];
+                    threshold = MAX(threshold, diff);
+                    x[IX(i, j, k)] = cur;
                 }
             }
         }
         set_bnd(M, N, O, b, x);
+
+        if (threshold < 1.e-6f) break;
     }
 
     delete[] x1;
