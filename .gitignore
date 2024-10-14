@@ -271,3 +271,6 @@ __pycache__/
 compile_commands.json
 fluid_sim
 events.txt
+output.*
+prof_md
+main.gprof
