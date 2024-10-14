@@ -101,13 +101,11 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
         for (int k = 1; k <= O; k++) {
             for (int j = 1; j <= N; j++) {
                 for (int i = 1; i <= M; i++) {
-                    float cur = x1[IX(i, j, k)] + (x[IX(i - 1, j, k)] + x[IX(i + 1, j, k)] +
+                    x[IX(i, j, k)] = x1[IX(i, j, k)] + (x[IX(i - 1, j, k)] + x[IX(i + 1, j, k)] +
                                            x[IX(i, j - 1, k)] + x[IX(i, j + 1, k)] +
                                            x[IX(i, j, k - 1)] + x[IX(i, j, k + 1)]) * cTimesA;
 
-                    float diff = cur - x1[IX(i, j, k)];
-                    threshold = MAX(threshold, diff);
-                    x[IX(i, j, k)] = cur;
+                    threshold = MAX(threshold, x[IX(i, j, k)] - x1[IX(i, j, k)]);
                 }
             }
         }
