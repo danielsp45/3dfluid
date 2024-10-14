@@ -83,19 +83,34 @@ void set_bnd(int M, int N, int O, int b, float *x) {
 // Linear solve for implicit methods (diffusion)
 void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c) {
     float cRecip = 1.0f / c;
+    float cTimesA = a * cRecip;
+
+    int size = (M + 2) * (N + 2) * (O + 2);
+    float* x1 = new float[size];
+
+    for (int k = 1; k <= O; k++) {
+        for (int j = 1; j <= N; j++) {
+            for (int i = 1; i <= M; i++) {
+                x1[IX(i, j, k)] = x0[IX(i, j, k)] * cRecip;
+            }
+        }
+    }
+
     for (int l = 0; l < LINEARSOLVERTIMES; l++) {
-        for (int i = 1; i <= M; i++) {
+        for (int k = 1; k <= O; k++) {
             for (int j = 1; j <= N; j++) {
-                for (int k = 1; k <= O; k++) {
-                    x[IX(i, j, k)] = (x0[IX(i, j, k)] +
-                                      a * (x[IX(i - 1, j, k)] + x[IX(i + 1, j, k)] +
+                for (int i = 1; i <= M; i++) {
+                    x[IX(i, j, k)] = x1[IX(i, j, k)] + (x[IX(i - 1, j, k)] + x[IX(i + 1, j, k)] +
                                            x[IX(i, j - 1, k)] + x[IX(i, j + 1, k)] +
-                                           x[IX(i, j, k - 1)] + x[IX(i, j, k + 1)])) * cRecip;
+                                           x[IX(i, j, k - 1)] + x[IX(i, j, k + 1)]) * cTimesA;
+
                 }
             }
         }
         set_bnd(M, N, O, b, x);
     }
+
+    delete[] x1;
 }
 
 // Diffusion step (uses implicit method)
