@@ -29,7 +29,7 @@ graph-prof: run-prof
 
 copy-to-search:
 	scp -p Makefile fluid_solver.cpp main.cpp EventManager.h EventManager.cpp fluid_solver.h events.txt search:~/3dfluid/
-	ssh search 'cd 3dfluid && chmod +x ./execute.sh'
+	ssh search 'cd 3dfluid && make'
 
 bench: all
 	echo "Starting to execute 3 times..."
