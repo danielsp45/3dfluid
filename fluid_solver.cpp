@@ -24,52 +24,19 @@ void add_source(int M, int N, int O, float *x, float *s, float dt) {
 void set_bnd(int M, int N, int O, int b, float *x) {
     int i, j;
 
+    int x_signal = (b == 3 || b == 1 || b == 2) ? -1 : 1;
+
     // Set boundary on faces
-    if (b == 3) {
+    for (j = 1; j <= N; j++) {
         for (i = 1; i <= M; i++) {
-            for (j = 1; j <= N; j++) {
-                x[IX(i, j, 0)] = -x[IX(i, j, 1)];
-                x[IX(i, j, O + 1)] = -x[IX(i, j, O)];
-            }
-        }
-    } else {
-        for (i = 1; i <= M; i++) {
-            for (j = 1; j <= N; j++) {
-                x[IX(i, j, 0)] = x[IX(i, j, 1)];
-                x[IX(i, j, O + 1)] = x[IX(i, j, O)];
-            }
-        }
-    }
+            x[IX(i, j, 0)] = x_signal * x[IX(i, j, 1)];
+            x[IX(i, j, O + 1)] = x_signal * x[IX(i, j, O)];
 
-    if (b == 1) {
-        for (i = 1; i <= N; i++) {
-            for (j = 1; j <= O; j++) {
-                x[IX(0, i, j)] = -x[IX(1, i, j)];
-                x[IX(M + 1, i, j)] = -x[IX(M, i, j)];
-            }
-        }
-    } else {
-        for (i = 1; i <= N; i++) {
-            for (j = 1; j <= O; j++) {
-                x[IX(0, i, j)] = x[IX(1, i, j)];
-                x[IX(M + 1, i, j)] = x[IX(M, i, j)];
-            }
-        }
-    }
+            x[IX(0, i, j)] = x_signal * x[IX(1, i, j)];
+            x[IX(M + 1, i, j)] = x_signal * x[IX(M, i, j)];
 
-    if (b == 2) {
-        for (i = 1; i <= M; i++) {
-            for (j = 1; j <= O; j++) {
-                x[IX(i, 0, j)] = -x[IX(i, 1, j)];
-                x[IX(i, N + 1, j)] = -x[IX(i, N, j)];
-            }
-        }
-    } else {
-        for (i = 1; i <= M; i++) {
-            for (j = 1; j <= O; j++) {
-                x[IX(i, 0, j)] = x[IX(i, 1, j)];
-                x[IX(i, N + 1, j)] = x[IX(i, N, j)];
-            }
+            x[IX(i, 0, j)] = x_signal * x[IX(i, 1, j)];
+            x[IX(i, N + 1, j)] = x_signal * x[IX(i, N, j)];
         }
     }
 
