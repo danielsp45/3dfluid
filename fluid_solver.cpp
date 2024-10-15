@@ -84,7 +84,7 @@ void set_bnd(int M, int N, int O, int b, float *x) {
 void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c) {
     float cRecip = 1.0f / c;
     float cTimesA = a * cRecip;
-    float threshold = 0.0f;
+    float max = 0.0f;
 
     int size = (M + 2) * (N + 2) * (O + 2);
     float* x1 = new float[size];
@@ -105,13 +105,13 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
                                            x[IX(i, j - 1, k)] + x[IX(i, j + 1, k)] +
                                            x[IX(i, j, k - 1)] + x[IX(i, j, k + 1)]) * cTimesA;
 
-                    threshold = MAX(threshold, x[IX(i, j, k)] - x1[IX(i, j, k)]);
+                    max = MAX(max, x[IX(i, j, k)] - x1[IX(i, j, k)]);
                 }
             }
         }
         set_bnd(M, N, O, b, x);
 
-        if (threshold < 1.e-6f) break;
+        if (max < 1.e-6f) break;
     }
 
     delete[] x1;
