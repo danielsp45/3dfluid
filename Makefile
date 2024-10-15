@@ -31,7 +31,7 @@ copy-to-search:
 	scp -p Makefile fluid_solver.cpp main.cpp EventManager.h EventManager.cpp fluid_solver.h events.txt search:~/3dfluid/
 	ssh search 'cd 3dfluid && module load gcc/11.2.0 && make'
 
-bench: all
+bench:
 	echo "Starting to execute 3 times..."
 	srun --partition=cpar perf stat -r 3 -M cpi,instructions -e branch-misses,L1-dcache-loads,L1-dcache-load-misses,cycles,duration_time,mem-loads,mem-stores ./fluid_sim
 

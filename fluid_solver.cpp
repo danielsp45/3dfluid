@@ -88,6 +88,7 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
 
     int size = (M + 2) * (N + 2) * (O + 2);
     float* x1 = new float[size];
+    float* x2 = new float[size];
 
     for (int k = 1; k <= O; k++) {
         for (int j = 1; j <= N; j++) {
@@ -101,9 +102,10 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
         for (int k = 1; k <= O; k++) {
             for (int j = 1; j <= N; j++) {
                 for (int i = 1; i <= M; i++) {
-                    x[IX(i, j, k)] = x1[IX(i, j, k)] + (x[IX(i - 1, j, k)] + x[IX(i + 1, j, k)] +
-                                           x[IX(i, j - 1, k)] + x[IX(i, j + 1, k)] +
-                                           x[IX(i, j, k - 1)] + x[IX(i, j, k + 1)]) * cTimesA;
+                    x2[IX(i, j, k)] = x[IX(i + 1, j, k)] + x[IX(i, j - 1, k)] + x[IX(i, j + 1, k)] +
+                                      x[IX(i, j, k - 1)] + x[IX(i, j, k + 1)];
+
+                    x[IX(i, j, k)] = x1[IX(i, j, k)] + (x2[IX(i, j, k)] + x[IX(i - 1, j, k)]) * cTimesA;
 
                     max = MAX(max, x[IX(i, j, k)] - x1[IX(i, j, k)]);
                 }
@@ -115,6 +117,7 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
     }
 
     delete[] x1;
+    delete[] x2;
 }
 
 // Diffusion step (uses implicit method)
