@@ -24,7 +24,7 @@ void add_source(int M, int N, int O, float *x, float *s, float dt) {
 void set_bnd(int M, int N, int O, int b, float *x) {
     int i, j;
 
-    int x_signal = (b == 3 || b == 1 || b == 2) ? -1 : 1;
+    float x_signal = (b == 3 || b == 1 || b == 2) ? -1.0f : 1.0f;
 
     // Set boundary on faces
     for (j = 1; j <= N; j++) {
