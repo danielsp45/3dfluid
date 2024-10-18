@@ -33,7 +33,7 @@ copy-to-search:
 
 bench:
 	echo "Starting to execute 3 times..."
-	srun --partition=cpar perf stat -r 3 -M cpi,instructions -e branch-misses,L1-dcache-loads,L1-dcache-load-misses,cycles,duration_time,mem-loads,mem-stores ./fluid_sim
+	srun --partition=cpar --exclusive perf stat -r 3 -M cpi,instructions -e branch-misses,L1-dcache-loads,L1-dcache-load-misses,cycles,duration_time,mem-loads,mem-stores ./fluid_sim
 
 bench-search: copy-to-search
 	ssh search 'cd 3dfluid && make bench'
