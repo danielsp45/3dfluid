@@ -11,6 +11,7 @@
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define LINEARSOLVERTIMES 20
+#define BLOCKSIZE 4
 
 // Add sources (density or velocity)
 void add_source(int M, int N, int O, float *x, float *s, float dt) {
@@ -54,24 +55,39 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
 
     int size = (M + 2) * (N + 2) * (O + 2);
     float x1[size];
-    float x2[size];
 
-    for (int k = 1; k <= O; k++) {
-        for (int j = 1; j <= N; j++) {
-            for (int i = 1; i <= M; i++) {
-                x1[IX(i, j, k)] = x0[IX(i, j, k)] * cRecip;
+    for (int kblock = 1; kblock <= O; kblock += BLOCKSIZE) {
+        for (int jblock = 1; jblock <= N; jblock += BLOCKSIZE) {
+            for (int iblock = 1; iblock <= M; iblock += BLOCKSIZE) {
+
+                for (int k = kblock; k < kblock + BLOCKSIZE && k <= O; k++) {
+                    for (int j = jblock; j < jblock + BLOCKSIZE && j <= N; j++) {
+                        for (int i = iblock; i < iblock + BLOCKSIZE && i <= M; i++) {
+                            int idx = IX(i, j, k);
+                            x1[idx] = x0[idx] * cRecip;
+                        }
+                    }
+                }
             }
         }
     }
 
-    for (int l = 0; l < LINEARSOLVERTIMES; l++) {
-        for (int k = 1; k <= O; k++) {
-            for (int j = 1; j <= N; j++) {
-                for (int i = 1; i <= M; i++) {
-                    x2[IX(i, j, k)] = x[IX(i + 1, j, k)] + x[IX(i, j - 1, k)] + x[IX(i, j + 1, k)] +
-                                      x[IX(i, j, k - 1)] + x[IX(i, j, k + 1)];
+    int jM = M + 2;
+    int kMN = (M + 2) * (N + 2);
 
-                    x[IX(i, j, k)] = x1[IX(i, j, k)] + (x2[IX(i, j, k)] + x[IX(i - 1, j, k)]) * cTimesA;
+    for (int l = 0; l < LINEARSOLVERTIMES; l++) {
+        for (int kblock = 1; kblock <= O; kblock += BLOCKSIZE) {
+            for (int jblock = 1; jblock <= N; jblock += BLOCKSIZE) {
+                for (int iblock = 1; iblock <= M; iblock += BLOCKSIZE) {
+
+                    for (int k = kblock; k < kblock + BLOCKSIZE && k <= O; k++) {
+                        for (int j = jblock; j < jblock + BLOCKSIZE && j <= N; j++) {
+                            for (int i = iblock; i < iblock + BLOCKSIZE && i <= M; i++) {
+                                int idx = IX(i, j, k);
+                                x[idx] = x1[idx] + (x[idx - 1] + x[idx + 1] + x[idx - jM] + x[idx + jM] + x[idx - kMN] + x[idx + kMN]) * cTimesA;
+                            }
+                        }
+                    }
                 }
             }
         }
