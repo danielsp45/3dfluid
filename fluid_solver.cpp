@@ -72,8 +72,7 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
         }
     }
 
-    int jM = M + 2;
-    int kMN = (M + 2) * (N + 2);
+    int MN = (M + 2) * (N + 2);
 
     for (int l = 0; l < LINEARSOLVERTIMES; l++) {
         for (int kblock = 1; kblock <= O; kblock += BLOCKSIZE) {
@@ -81,10 +80,12 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
                 for (int iblock = 1; iblock <= M; iblock += BLOCKSIZE) {
 
                     for (int k = kblock; k < kblock + BLOCKSIZE && k <= O; k++) {
+                        int MNk = MN * k;
                         for (int j = jblock; j < jblock + BLOCKSIZE && j <= N; j++) {
+                            int jM = j * (M + 2);
                             for (int i = iblock; i < iblock + BLOCKSIZE && i <= M; i++) {
-                                int idx = IX(i, j, k);
-                                x[idx] = x1[idx] + (x[idx - 1] + x[idx + 1] + x[idx - jM] + x[idx + jM] + x[idx - kMN] + x[idx + kMN]) * cTimesA;
+                                int idx = i + jM + MNk;
+                                x[idx] = x1[idx] + (x[idx - 1] + x[idx + 1] + x[idx - (M + 2)] + x[idx + (M + 2)] + x[idx - MN] + x[idx + MN]) * cTimesA;
                             }
                         }
                     }
