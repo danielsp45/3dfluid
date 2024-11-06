@@ -2,10 +2,17 @@ CPP = g++ -Wall -std=c++11
 SRCS = main.cpp fluid_solver.cpp EventManager.cpp
 CFLAGS = -O3 -funroll-loops -msse4 -mavx -ffast-math
 
-all:
-	$(CPP) $(CFLAGS) $(SRCS) -o fluid_sim -lm
+THREADS ?= 4
 
-run: all
+all:
+	$(CPP) $(CFLAGS) $(SRCS) -o fluid_sim -lm -fopenmp
+
+runseq: all
+	export OMP_NUM_THREADS=1
+	./fluid_sim
+
+runpar: all
+	export OMP_NUM_THREADS=$(THREADS)
 	./fluid_sim
 
 clean:
@@ -33,7 +40,7 @@ copy-to-search:
 
 bench:
 	echo "Starting to execute 3 times..."
-	srun --partition=cpar --exclusive perf stat -r 3 -M cpi,instructions -e branch-misses,L1-dcache-loads,L1-dcache-load-misses,cycles,duration_time,mem-loads,mem-stores ./fluid_sim
+	srun --partition=cpar --cpus-per-task=$(THREADS) perf stat -r 3 -M cpi,instructions -e branch-misses,L1-dcache-loads,L1-dcache-load-misses,cycles,duration_time,mem-loads,mem-stores ./fluid_sim
 
 bench-search: copy-to-search
 	ssh search 'cd 3dfluid && make bench'
