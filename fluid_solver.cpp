@@ -55,8 +55,8 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
 
     do {
         max_c = 0.0f;
-        for (int i = 1; i <= M; i++) {
-            for (int j = 1; j <= N; j++) {
+        for (int j = 1; j <= N; j++) {
+            for (int i = 1; i <= M; i++) {
                  for (int k = 1 + (i+j)%2; k <= O; k+=2) {
                     old_x = x[IX(i, j, k)];
                     x[IX(i, j, k)] = (x0[IX(i, j, k)] +
@@ -69,8 +69,8 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
             }
         }
 
-        for (int i = 1; i <= M; i++) {
-            for (int j = 1; j <= N; j++) {
+        for (int j = 1; j <= N; j++) {
+            for (int i = 1; i <= M; i++) {
                 for (int k = 1 + (i+j+1)%2; k <= O; k+=2) {
                     old_x = x[IX(i, j, k)];
                     x[IX(i, j, k)] = (x0[IX(i, j, k)] +
