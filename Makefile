@@ -2,7 +2,8 @@ CPP = g++ -Wall -std=c++11
 SRCS = main.cpp fluid_solver.cpp EventManager.cpp
 CFLAGS = -O3 -funroll-loops -msse4 -mavx -ffast-math
 
-THREADS ?= 4
+THREADS ?= 24
+MAX_THREADS ?= 48
 
 all: seq par
 
@@ -38,12 +39,12 @@ graph-prof: run-prof
 	dot -Tpng -o output.png output.dot
 
 copy-to-search:
-	scp -p run.sh Makefile fluid_solver.cpp main.cpp EventManager.h EventManager.cpp fluid_solver.h events.txt search:~/3dfluid/
+	scp -p *.sh $(SRCS) EventManager.h events.txt fluid_solver.h Makefile search:~/3dfluid/
 	ssh search 'cd 3dfluid && module load gcc/11.2.0 && make'
 
 bench:
-	echo "Starting to execute 3 times..."
-	srun --partition=cpar --cpus-per-task=$(THREADS) perf stat -r 3 -M cpi,instructions -e branch-misses,L1-dcache-loads,L1-dcache-load-misses,cycles,duration_time,mem-loads,mem-stores ./fluid_sim
+	echo "Starting to benchmark..."
+	srun --partition=day --constraint=c24 --ntasks=1 --cpus-per-task=$(MAX_THREADS) run.sh
 
 bench-search: copy-to-search
 	ssh search 'cd 3dfluid && make bench'

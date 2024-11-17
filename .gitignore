@@ -276,3 +276,4 @@ prof_md
 main.gprof
 fluid_solver.s
 gmon.out
+perfreport
