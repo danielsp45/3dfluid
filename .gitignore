@@ -269,7 +269,7 @@ __pycache__/
 
 .[Cc]langd*
 compile_commands.json
-fluid_sim
+fluid_sim*
 events.txt
 output.*
 prof_md

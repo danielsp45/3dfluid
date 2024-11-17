@@ -4,20 +4,23 @@ CFLAGS = -O3 -funroll-loops -msse4 -mavx -ffast-math
 
 THREADS ?= 4
 
-all:
-	$(CPP) $(CFLAGS) $(SRCS) -o fluid_sim -lm -fopenmp
+all: seq par
 
-runseq: all
-	export OMP_NUM_THREADS=1
-	./fluid_sim
+seq:
+	$(CPP) $(CFLAGS) -Wno-unknown-pragmas $(SRCS) -lm -o fluid_sim_seq
 
-runpar: all
-	export OMP_NUM_THREADS=$(THREADS)
-	./fluid_sim
+par:
+	$(CPP) $(CFLAGS) -fopenmp $(SRCS) -lm -o fluid_sim
+
+runseq: seq
+	OMP_NUM_THREADS=1 ./fluid_sim_seq
+
+runpar: par
+	OMP_NUM_THREADS=$(THREADS) ./fluid_sim
 
 clean:
 	@echo Cleaning up...
-	@rm -f fluid_sim gmon.out fluid_solver.s main.gprof output.* prof_md
+	@rm -f fluid_sim* gmon.out fluid_solver.s main.gprof output.* prof_md
 	@echo Done.
 
 PROF_FLAGS = -pg
@@ -35,7 +38,7 @@ graph-prof: run-prof
 	dot -Tpng -o output.png output.dot
 
 copy-to-search:
-	scp -p Makefile fluid_solver.cpp main.cpp EventManager.h EventManager.cpp fluid_solver.h events.txt search:~/3dfluid/
+	scp -p run.sh Makefile fluid_solver.cpp main.cpp EventManager.h EventManager.cpp fluid_solver.h events.txt search:~/3dfluid/
 	ssh search 'cd 3dfluid && module load gcc/11.2.0 && make'
 
 bench:
