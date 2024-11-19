@@ -17,7 +17,7 @@
 void add_source(int M, int N, int O, float *x, float *s, float dt) {
     int size = (M + 2) * (N + 2) * (O + 2);
 
-    #pragma omp parallel for simd
+    #pragma omp parallel for
     for (int i = 0; i < size; i++) {
         x[i] += dt * s[i];
     }
@@ -28,7 +28,7 @@ void set_bnd(int M, int N, int O, int b, float *x) {
     float x_signal = (b == 3 || b == 1 || b == 2) ? -1.0f : 1.0f;
 
     // Set boundary on faces
-    #pragma omp parallel for simd collapse(2)
+    #pragma omp parallel for collapse(2)
     for (int j = 1; j <= N; j++) {
         for (int i = 1; i <= M; i++) {
             x[IX(i, j, 0)] = x_signal * x[IX(i, j, 1)];
@@ -60,7 +60,7 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
     do {
         max_c = 0.0f;
 
-        #pragma omp parallel for simd collapse(2) private(old_x, change) reduction(max:max_c)
+        #pragma omp parallel for collapse(2) reduction(max:max_c) private(old_x, change)
         for (int k = 1; k <= O; k++) {
             for (int j = 1; j <= N; j++) {
                 for (int i = 1 + (k + j) % 2; i <= M; i += 2) {
@@ -75,7 +75,7 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
             }
         }
 
-        #pragma omp parallel for simd collapse(2) private(old_x, change) reduction(max:max_c)
+        #pragma omp parallel for collapse(2) reduction(max:max_c) private(old_x, change)
         for (int k = 1; k <= O; k++) {
             for (int j = 1; j <= N; j++) {
                 for (int i = 1 + (k + j + 1) % 2; i <= M; i += 2) {
@@ -104,7 +104,7 @@ void diffuse(int M, int N, int O, int b, float *x, float *x0, float diff, float 
 void advect(int M, int N, int O, int b, float *d, float *d0, float *u, float *v, float *w, float dt) {
     float dtX = dt * M, dtY = dt * N, dtZ = dt * O;
 
-    #pragma omp parallel for simd collapse(3)
+    #pragma omp parallel for collapse(3)
     for (int k = 1; k <= O; k++) {
         for (int j = 1; j <= N; j++) {
             for (int i = 1; i <= M; i++) {
@@ -141,7 +141,7 @@ void advect(int M, int N, int O, int b, float *d, float *d0, float *u, float *v,
 void project(int M, int N, int O, float *u, float *v, float *w, float *p, float *div) {
     float halfM = -0.5f / MAX(MAX(M, N), O);
 
-    #pragma omp parallel for simd collapse(3)
+    #pragma omp parallel for collapse(3)
     for (int k = 1; k <= O; k++) {
         for (int j = 1; j <= N; j++) {
             for (int i = 1; i <= M; i++) {
@@ -158,7 +158,7 @@ void project(int M, int N, int O, float *u, float *v, float *w, float *p, float 
     set_bnd(M, N, O, 0, p);
     lin_solve(M, N, O, 0, p, div, 1, 6);
 
-    #pragma omp parallel for simd collapse(3)
+    #pragma omp parallel for collapse(3)
     for (int k = 1; k <= O; k++) {
         for (int j = 1; j <= N; j++) {
             for (int i = 1; i <= M; i++) {
