@@ -2,7 +2,7 @@ CPP = g++ -Wall -std=c++11
 SRCS = main.cpp fluid_solver.cpp EventManager.cpp
 CFLAGS = -O3 -funroll-loops -msse4 -mavx -ffast-math
 
-IDEAL_THREADS ?= 21
+IDEAL_THREADS ?= 18
 MAX_THREADS ?= 48
 
 all: seq par
