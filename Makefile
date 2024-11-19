@@ -2,7 +2,7 @@ CPP = g++ -Wall -std=c++11
 SRCS = main.cpp fluid_solver.cpp EventManager.cpp
 CFLAGS = -O3 -funroll-loops -msse4 -mavx -ffast-math
 
-THREADS ?= 24
+IDEAL_THREADS ?= 21
 MAX_THREADS ?= 48
 
 all: seq par
@@ -17,7 +17,7 @@ runseq: seq
 	OMP_NUM_THREADS=1 ./fluid_sim_seq
 
 runpar: par
-	OMP_NUM_THREADS=$(THREADS) ./fluid_sim
+	OMP_NUM_THREADS=$(IDEAL_THREADS) ./fluid_sim
 
 clean:
 	@echo Cleaning up...
@@ -27,7 +27,7 @@ clean:
 PROF_FLAGS = -pg
 
 prof:
-	$(CPP) $(CFLAGS) $(PROF_FLAGS) $(SRCS) -o fluid_sim -lm -o prof_md
+	$(CPP) $(CFLAGS) -Wno-unknown-pragmas $(PROF_FLAGS) $(SRCS) -o fluid_sim -lm -o prof_md
 
 run-prof: prof
 	./prof_md

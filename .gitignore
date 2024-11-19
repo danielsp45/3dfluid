@@ -277,3 +277,4 @@ main.gprof
 fluid_solver.s
 gmon.out
 perfreport
+perfstat
