@@ -22,58 +22,70 @@ static float *dens, *dens_prev;
 
 // Function to allocate simulation data
 int allocate_data() {
-    int size = (M + 2) * (N + 2) * (O + 2);
-    u = new float[size];
-    v = new float[size];
-    w = new float[size];
-    u_prev = new float[size];
-    v_prev = new float[size];
-    w_prev = new float[size];
-    dens = new float[size];
-    dens_prev = new float[size];
+    int size = ((M + 2) * (N + 2) * (O + 2) * sizeof(float));
 
-    if (!u || !v || !w || !u_prev || !v_prev || !w_prev || !dens || !dens_prev) {
-        std::cerr << "Cannot allocate memory" << std::endl;
-        return 0;
-    }
+    // FIXME: Can be a single cudaMalloc?
+    cudaMalloc((void**) &u, size);
+    cudaMalloc((void**) &v, size);
+    cudaMalloc((void**) &w, size);
+    cudaMalloc((void**) &u_prev, size);
+    cudaMalloc((void**) &v_prev, size);
+    cudaMalloc((void**) &w_prev, size);
+    cudaMalloc((void**) &dens, size);
+    cudaMalloc((void**) &dens_prev, size);
+
+    // checkCUDAError("Memory allocation failed");
+
     return 1;
 }
 
 // Function to clear the data (set all to zero)
 void clear_data() {
     int size = (M + 2) * (N + 2) * (O + 2);
-    for (int i = 0; i < size; i++) {
-        u[i] = v[i] = w[i] = u_prev[i] = v_prev[i] = w_prev[i] = dens[i] =
-        dens_prev[i] = 0.0f;
-    }
+    
+    cudaMemset(u, 0, size);
+    cudaMemset(v, 0, size);
+    cudaMemset(w, 0, size);
+    cudaMemset(u_prev, 0, size);
+    cudaMemset(v_prev, 0, size);
+    cudaMemset(w_prev, 0, size);
+    cudaMemset(dens, 0, size);
+    cudaMemset(dens_prev, 0, size);
+
+    // checkCUDAError("Clear data failed");
 }
 
 // Free allocated memory
 void free_data() {
-    delete[] u;
-    delete[] v;
-    delete[] w;
-    delete[] u_prev;
-    delete[] v_prev;
-    delete[] w_prev;
-    delete[] dens;
-    delete[] dens_prev;
+    cudaFree(u);
+    cudaFree(v);
+    cudaFree(w);
+    cudaFree(u_prev);
+    cudaFree(v_prev);
+    cudaFree(w_prev);
+    cudaFree(dens);
+    cudaFree(dens_prev);
+
+    // checkCUDAError("Free memory failed");
 }
 
 // Apply events (source or force) for the current timestep
-void apply_events(const std::vector<Event> &events) {
-    for (const auto &event: events) {
-        if (event.type == ADD_SOURCE) {
-            // Apply density source at the center of the grid
-            int i = M / 2, j = N / 2, k = O / 2;
-            dens[IX(i, j, k)] = event.density;
-        } else if (event.type == APPLY_FORCE) {
-            // Apply forces based on the event's vector (fx, fy, fz)
-            int i = M / 2, j = N / 2, k = O / 2;
-            u[IX(i, j, k)] = event.force.x;
-            v[IX(i, j, k)] = event.force.y;
-            w[IX(i, j, k)] = event.force.z;
-        }
+__global__
+void apply_events(Event *gevents, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+
+    Event event = gevents[idx];
+    if (event.type == ADD_SOURCE) {
+        // Apply density source at the center of the grid
+        int i = M / 2, j = N / 2, k = O / 2;
+        dens[IX(i, j, k)] = event.density;
+    } else if (event.type == APPLY_FORCE) {
+        // Apply forces based on the event's vector (fx, fy, fz)
+        int i = M / 2, j = N / 2, k = O / 2;
+        u[IX(i, j, k)] = event.force.x;
+        v[IX(i, j, k)] = event.force.y;
+        w[IX(i, j, k)] = event.force.z;
     }
 }
 
@@ -94,7 +106,15 @@ void simulate(EventManager &eventManager, int timesteps) {
         std::vector<Event> events = eventManager.get_events_at_timestamp(t);
 
         // Apply events to the simulation
-        apply_events(events);
+
+        // TODO: Fix this implementation
+        Event *gevents;
+        cudaMalloc((void**) &gevents, events.size() * sizeof(Event));
+        cudaMemcpy(gevents, events.data(), events.size() * sizeof(Event), cudaMemcpyHostToDevice);
+        int threadsPerBlock = 256;
+        int blocksPerGrid = (events.size() + threadsPerBlock - 1) / threadsPerBlock;
+        apply_events<<<blocksPerGrid, threadsPerBlock>>>(gevents, events.size());
+        cudaFree(gevents);
 
         // Perform the simulation steps
         vel_step(M, N, O, u, v, w, u_prev, v_prev, w_prev, visc, dt);

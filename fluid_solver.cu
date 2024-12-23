@@ -14,13 +14,14 @@
 #define BLOCKSIZE 4
 
 // Add sources (density or velocity)
+__global__
 void add_source(int M, int N, int O, float *x, float *s, float dt) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int size = (M + 2) * (N + 2) * (O + 2);
 
-    #pragma omp parallel for
-    for (int i = 0; i < size; i++) {
-        x[i] += dt * s[i];
-    }
+    if (idx >= size) return;
+
+    x[idx] += dt * s[idx];
 }
 
 // Set boundary conditions
