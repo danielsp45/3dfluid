@@ -19,12 +19,20 @@ static float visc = 0.0001f; // Viscosity constant
 // Fluid simulation arrays
 static float *u, *v, *w, *u_prev, *v_prev, *w_prev;
 static float *dens, *dens_prev;
+static float *dens_res;
+
+void checkCUDAError(const char *msg) {
+    cudaError_t err = cudaGetLastError();
+    if (cudaSuccess != err) {
+        std::cerr << "CUDA Error: " << msg << ", " << cudaGetErrorString(err) << ")" << std::endl;
+        exit(-1);
+    }
+}
 
 // Function to allocate simulation data
 int allocate_data() {
-    int size = ((M + 2) * (N + 2) * (O + 2) * sizeof(float));
+    int size = (M + 2) * (N + 2) * (O + 2) * sizeof(float);
 
-    // FIXME: Can be a single cudaMalloc?
     cudaMalloc((void**) &u, size);
     cudaMalloc((void**) &v, size);
     cudaMalloc((void**) &w, size);
@@ -34,14 +42,20 @@ int allocate_data() {
     cudaMalloc((void**) &dens, size);
     cudaMalloc((void**) &dens_prev, size);
 
-    // checkCUDAError("Memory allocation failed");
+    checkCUDAError("Memory allocation failed");
+
+    dens_rens = new float[size];
+    if (!dens_res) {
+        std::cerr << "Memory allocation failed" << std::endl;
+        return 0;
+    }
 
     return 1;
 }
 
 // Function to clear the data (set all to zero)
 void clear_data() {
-    int size = (M + 2) * (N + 2) * (O + 2);
+    int size = (M + 2) * (N + 2) * (O + 2) * sizeof(float);
     
     cudaMemset(u, 0, size);
     cudaMemset(v, 0, size);
@@ -52,7 +66,7 @@ void clear_data() {
     cudaMemset(dens, 0, size);
     cudaMemset(dens_prev, 0, size);
 
-    // checkCUDAError("Clear data failed");
+    checkCUDAError("Clear data failed");
 }
 
 // Free allocated memory
@@ -66,26 +80,55 @@ void free_data() {
     cudaFree(dens);
     cudaFree(dens_prev);
 
-    // checkCUDAError("Free memory failed");
+    checkCUDAError("Free memory failed");
+
+    delete[] dens_res;
+}
+
+__global__
+void update_dens(float *dens, int idx, float density) {
+    dens[idx] = density;
+}
+
+__global__
+void update_uvw(float *u, float *v, float *w, int idx, float fx, float fy, float fz) {
+    u[idx] = fx;
+    v[idx] = fy;
+    w[idx] = fz;
 }
 
 // Apply events (source or force) for the current timestep
-__global__
-void apply_events(Event *gevents, int size) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= size) return;
+void apply_events(const std::vector<Event> &events) {
+    int i = M / 2, j = N / 2, k = O / 2;
+    int idx = IX(i, j, k);
 
-    Event event = gevents[idx];
-    if (event.type == ADD_SOURCE) {
-        // Apply density source at the center of the grid
-        int i = M / 2, j = N / 2, k = O / 2;
-        dens[IX(i, j, k)] = event.density;
-    } else if (event.type == APPLY_FORCE) {
-        // Apply forces based on the event's vector (fx, fy, fz)
-        int i = M / 2, j = N / 2, k = O / 2;
-        u[IX(i, j, k)] = event.force.x;
-        v[IX(i, j, k)] = event.force.y;
-        w[IX(i, j, k)] = event.force.z;
+    bool dens_updated = false;
+    float density = 0.0f;
+
+    bool force_updated = false;
+    float fx = 0.0f, fy = 0.0f, fz = 0.0f;
+
+    for (const auto &event : events) {
+        if (event.type == ADD_SOURCE) {
+            // Apply density source at the center of the grid
+            dens_updated = true;
+            density = event.density;
+        } else if (event.type == APPLY_FORCE) {
+            // Apply forces based on the event's vector (fx, fy, fz)
+            force_updated = true;
+            fx = event.force.x;
+            fy = event.force.y;
+            fz = event.force.z;
+        }
+    }
+
+    // dens and uvw are already on the device (a single thread will update both)
+    if (dens_updated) {
+        update_dens<<<1, 1>>>(dens, idx, density);
+    }
+
+    if (force_updated) {
+        update_uvw<<<1, 1>>>(u, v, w, idx, fx, fy, fz);
     }
 }
 
@@ -94,7 +137,7 @@ float sum_density() {
     float total_density = 0.0f;
     int size = (M + 2) * (N + 2) * (O + 2);
     for (int i = 0; i < size; i++) {
-        total_density += dens[i];
+        total_density += dens_res[i];
     }
     return total_density;
 }
@@ -106,20 +149,16 @@ void simulate(EventManager &eventManager, int timesteps) {
         std::vector<Event> events = eventManager.get_events_at_timestamp(t);
 
         // Apply events to the simulation
-
-        // TODO: Fix this implementation
-        Event *gevents;
-        cudaMalloc((void**) &gevents, events.size() * sizeof(Event));
-        cudaMemcpy(gevents, events.data(), events.size() * sizeof(Event), cudaMemcpyHostToDevice);
-        int threadsPerBlock = 256;
-        int blocksPerGrid = (events.size() + threadsPerBlock - 1) / threadsPerBlock;
-        apply_events<<<blocksPerGrid, threadsPerBlock>>>(gevents, events.size());
-        cudaFree(gevents);
+        apply_events(events);
 
         // Perform the simulation steps
         vel_step(M, N, O, u, v, w, u_prev, v_prev, w_prev, visc, dt);
         dens_step(M, N, O, dens, dens_prev, u, v, w, diff, dt);
     }
+
+    // Copy the data back to the host
+    int size = (M + 2) * (N + 2) * (O + 2) * sizeof(float);
+    cudaMemcpy(dens_res, dens, size, cudaMemcpyDeviceToHost);
 }
 
 int main() {

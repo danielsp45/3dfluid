@@ -10,44 +10,100 @@
   }
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
+
 #define LINEARSOLVERTIMES 20
 #define BLOCKSIZE 4
 
+#define THREADSPERBLOCK 256
+
 // Add sources (density or velocity)
 __global__
-void add_source(int M, int N, int O, float *x, float *s, float dt) {
+void add_source_kernel(int size, float *x, float *s, float dt) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    int size = (M + 2) * (N + 2) * (O + 2);
 
-    if (idx >= size) return;
-
-    x[idx] += dt * s[idx];
+    if (idx < size) {
+        x[idx] += dt * s[idx];
+    }
 }
 
-// Set boundary conditions
-void set_bnd(int M, int N, int O, int b, float *x) {
-    float x_signal = (b == 3 || b == 1 || b == 2) ? -1.0f : 1.0f;
+void add_source(int M, int N, int O, float *x, float *s, float dt) {
+    int size = (M + 2) * (N + 2) * (O + 2);
+    int blocks = (size + THREADSPERBLOCK - 1) / THREADSPERBLOCK;
+    add_source_kernel<<<blocks, THREADSPERBLOCK>>>(size, x, s, dt);
+}
 
-    // Set boundary on faces
-    #pragma omp parallel for collapse(2)
-    for (int j = 1; j <= N; j++) {
-        for (int i = 1; i <= M; i++) {
-            x[IX(i, j, 0)] = x_signal * x[IX(i, j, 1)];
-            x[IX(i, j, O + 1)] = x_signal * x[IX(i, j, O)];
+__global__
+void set_bnd_z_kernel(int M, int N, int O, float x_signal, float *x) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int j = blockIdx.y * blockDim.y + threadIdx.y;
 
-            x[IX(0, i, j)] = x_signal * x[IX(1, i, j)];
-            x[IX(M + 1, i, j)] = x_signal * x[IX(M, i, j)];
-
-            x[IX(i, 0, j)] = x_signal * x[IX(i, 1, j)];
-            x[IX(i, N + 1, j)] = x_signal * x[IX(i, N, j)];
-        }
+    if (i < M + 1 && j < N + 1) {
+        x[IX(i, j, 0)] = x_signal * x[IX(i, j, 1)];
+        x[IX(i, j, O + 1)] = x_signal * x[IX(i, j, O)];
     }
+}
 
-    // Set corners
+__global__
+void set_bnd_y_kernel(int M, int N, int O, float x_signal, float *x) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int k = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (i < M + 1 && k < O + 1) {
+        x[IX(i, 0, k)] = x_signal * x[IX(i, 1, k)];
+        x[IX(i, N + 1, k)] = x_signal * x[IX(i, N, k)];
+    }
+}
+
+__global__
+void set_bnd_x_kernel(int M, int N, int O, float x_signal, float *x) {
+    int j = blockIdx.x * blockDim.x + threadIdx.x;
+    int k = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (j < N + 1 && k < O + 1) {
+        x[IX(0, j, k)] = x_signal * x[IX(1, j, k)];
+        x[IX(M + 1, j, k)] = x_signal * x[IX(M, j, k)];
+    }
+}
+
+__global__
+void set_bnd_corners_kernel(int M, int N, int O, float *x) {
     x[IX(0, 0, 0)] = 0.33f * (x[IX(1, 0, 0)] + x[IX(0, 1, 0)] + x[IX(0, 0, 1)]);
     x[IX(M + 1, 0, 0)] = 0.33f * (x[IX(M, 0, 0)] + x[IX(M + 1, 1, 0)] + x[IX(M + 1, 0, 1)]);
     x[IX(0, N + 1, 0)] = 0.33f * (x[IX(1, N + 1, 0)] + x[IX(0, N, 0)] + x[IX(0, N + 1, 1)]);
     x[IX(M + 1, N + 1, 0)] = 0.33f * (x[IX(M, N + 1, 0)] + x[IX(M + 1, N, 0)] + x[IX(M + 1, N + 1, 1)]);
+}
+
+// Set boundary conditions
+void set_bnd(int M, int N, int O, int b, float *x) {
+    // Precompute x_signal to avoid thread divergence
+    float x_signal = (b == 3 || b == 1 || b == 2) ? -1.0f : 1.0f;
+
+    // One kernel per boundary helps reducing thread divergence 
+    dim3 blockDim(8, 8);
+
+    // Set z boundaries (M x N)
+    dim3 blocksZ(
+        (M + blockDim.x - 1) / blockDim.x,
+        (N + blockDim.y - 1) / blockDim.y
+    );
+    set_bnd_z_kernel<<<blocksZ, blockDim>>>(M, N, O, x_signal, x);
+
+    // Set y boundaries (M x O)
+    dim3 blocksY(
+        (M + blockDim.x - 1) / blockDim.x,
+        (O + blockDim.y - 1) / blockDim.y
+    );
+    set_bnd_y_kernel<<<blocksY, blockDim>>>(M, N, O, x_signal, x);
+
+    // Set x boundaries (N x O)
+    dim3 blocksX(
+        (N + blockDim.x - 1) / blockDim.x,
+        (O + blockDim.y - 1) / blockDim.y
+    );
+    set_bnd_x_kernel<<<blocksX, blockDim>>>(M, N, O, x_signal, x);
+
+    // Set corners (1 x 1)
+    set_bnd_corners_kernel<<<1, 1>>>(M, N, O, x);
 }
 
 // Red-black solver with convergence check
