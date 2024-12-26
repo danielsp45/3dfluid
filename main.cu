@@ -44,7 +44,7 @@ int allocate_data() {
 
     checkCUDAError("Memory allocation failed");
 
-    dens_rens = new float[size];
+    dens_res = new float[size];
     if (!dens_res) {
         std::cerr << "Memory allocation failed" << std::endl;
         return 0;
