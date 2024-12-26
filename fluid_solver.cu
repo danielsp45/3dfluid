@@ -30,7 +30,6 @@ void add_source(int M, int N, int O, float *x, float *s, float dt) {
     constexpr int threads_per_block = 256;
     int blocks = (size + threads_per_block - 1) / threads_per_block;
     add_source_kernel<<<blocks, threads_per_block>>>(size, x, s, dt);
-    cudaDeviceSynchronize();
 }
 
 template<unsigned int boundary_type>
@@ -91,8 +90,6 @@ void set_bnd(int M, int N, int O, int b, float *x) {
 
     // Set corners (1 x 1)
     set_bnd_corners_kernel<<<1, 1>>>(M, N, O, x);
-
-    cudaDeviceSynchronize();
 }
 
 // Red-black solver with convergence check
@@ -220,7 +217,6 @@ void advect(int M, int N, int O, int b, float *d, float *d0, float *u, float *v,
                 (O + blockDim.z - 1) / blockDim.z);
 
     advect_kernel<<<blockDim, blocks>>>(dtX, dtY, dtZ, M, N, O, d, d0, u, v, w);
-    cudaDeviceSynchronize();
 
     set_bnd(M, N, O, b, d);
 }
@@ -280,7 +276,6 @@ void project(int M, int N, int O, float *u, float *v, float *w, float *p, float 
                 (N + blockDim.y - 1) / blockDim.y,
                 (O + blockDim.z - 1) / blockDim.z);
     project_kernel_1<<<blockDim,blocks>>>(M, N, O, u, v, w, p, div, halfM);
-    cudaDeviceSynchronize();
 
     set_bnd(M, N, O, 0, div);
     set_bnd(M, N, O, 0, p);
@@ -297,7 +292,6 @@ void project(int M, int N, int O, float *u, float *v, float *w, float *p, float 
     //         }
     //     }
     project_kernel_2<<<blockDim,blocks>>>(M, N, O, u, v, w, p);
-    cudaDeviceSynchronize();
 
     set_bnd(M, N, O, 1, u);
     set_bnd(M, N, O, 2, v);
