@@ -1,5 +1,7 @@
 #include "fluid_solver.h"
-#include <cmath>
+
+#include <algorithm>
+#include "cuda_utils.h"
 
 #define IX(i, j, k) ((i) + (M + 2) * (j) + (M + 2) * (N + 2) * (k))
 #define SWAP(x0, x)                                                            \
@@ -29,7 +31,7 @@ void add_source(int M, int N, int O, float *x, float *s, float dt) {
     const int size = (M + 2) * (N + 2) * (O + 2);
     constexpr int threads_per_block = 256;
     int blocks = (size + threads_per_block - 1) / threads_per_block;
-    add_source_kernel<<<blocks, threads_per_block>>>(size, x, s, dt);
+    CUDA(add_source_kernel<<<blocks, threads_per_block>>>(size, x, s, dt));
 }
 
 template<unsigned int boundary_type>
@@ -78,62 +80,96 @@ void set_bnd(int M, int N, int O, int b, float *x) {
 
     // Set z boundaries (M x N)
     dim3 blocksZ((M + blockDim.x - 1) / blockDim.x, (N + blockDim.y - 1) / blockDim.y);
-    set_bnd_kernel<0><<<blocksZ, blockDim>>>(M, N, O, x_signal, x);
+    CUDA(set_bnd_kernel<0><<<blocksZ, blockDim>>>(M, N, O, x_signal, x));
 
     // Set y boundaries (M x O)
     dim3 blocksY((M + blockDim.x - 1) / blockDim.x, (O + blockDim.y - 1) / blockDim.y);
-    set_bnd_kernel<1><<<blocksY, blockDim>>>(M, N, O, x_signal, x);
+    CUDA(set_bnd_kernel<1><<<blocksY, blockDim>>>(M, N, O, x_signal, x));
 
     // Set x boundaries (N x O)
     dim3 blocksX((N + blockDim.x - 1) / blockDim.x, (O + blockDim.y - 1) / blockDim.y);
-    set_bnd_kernel<2><<<blocksX, blockDim>>>(M, N, O, x_signal, x);
+    CUDA(set_bnd_kernel<2><<<blocksX, blockDim>>>(M, N, O, x_signal, x));
 
     // Set corners (1 x 1)
-    set_bnd_corners_kernel<<<1, 1>>>(M, N, O, x);
+    CUDA(set_bnd_corners_kernel<<<1, 1>>>(M, N, O, x));
 }
 
-// Red-black solver with convergence check
+__global__ void lin_solve_step(
+    int M, int N, int O, int b, float *x, const float *x0,
+    float cRecip, float cTimesA, int parity, float *max_change) {
+    extern __shared__ float sdata[]; // Shared memory for max change reduction
+    int tid = threadIdx.x + threadIdx.y * blockDim.x + threadIdx.z * blockDim.x * blockDim.y;
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x + 1;
+    int j = blockIdx.y * blockDim.y + threadIdx.y + 1;
+    int k = blockIdx.z * blockDim.z + threadIdx.z + 1;
+
+    float local_max_change = 0.0f;
+
+    if (i <= M && j <= N && k <= O && (i + j + k) % 2 == parity) {
+        int idx = IX(i, j, k);
+        float old_x = x[idx];
+        x[idx] = (x0[idx] * cRecip) +
+                 (x[IX(i - 1, j, k)] + x[IX(i + 1, j, k)] +
+                  x[IX(i, j - 1, k)] + x[IX(i, j + 1, k)] +
+                  x[IX(i, j, k - 1)] + x[IX(i, j, k + 1)]) * cTimesA;
+        local_max_change = fabsf(x[idx] - old_x);
+    }
+
+    // Load local max change into shared memory
+    sdata[tid] = local_max_change;
+    __syncthreads();
+
+    // Perform block-wide reduction in shared memory
+    for (int s = blockDim.x * blockDim.y * blockDim.z / 2; s > 0; s >>= 1) {
+        if (tid < s) {
+            sdata[tid] = fmaxf(sdata[tid], sdata[tid + s]);
+        }
+        __syncthreads();
+    }
+
+    // Write block's max change to global memory
+    if (tid == 0) {
+        max_change[blockIdx.x + blockIdx.y * gridDim.x + blockIdx.z * gridDim.x * gridDim.y] = sdata[0];
+    }
+}
+
 void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c) {
-    float tol = 1e-7, max_c, old_x, change;
-    int l = 0;
+    float tol = 1e-7, *d_max_change, *h_max_change;
+    const int BLOCK_SIZE = 8;
+    int grid_size = (M + BLOCK_SIZE - 1) / BLOCK_SIZE * (N + BLOCK_SIZE - 1) / BLOCK_SIZE * (O + BLOCK_SIZE - 1) /
+                    BLOCK_SIZE;
+
+    CUDA(cudaMalloc(&d_max_change, grid_size * sizeof(float)));
+    h_max_change = new float[grid_size];
 
     float cRecip = 1.0f / c;
     float cTimesA = a * cRecip;
 
+    int l = 0;
     do {
-        max_c = 0.0f;
+        for (int parity = 0; parity < 2; ++parity) {
+            dim3 threads(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+            dim3 blocks((M + BLOCK_SIZE - 1) / BLOCK_SIZE,
+                        (N + BLOCK_SIZE - 1) / BLOCK_SIZE,
+                        (O + BLOCK_SIZE - 1) / BLOCK_SIZE);
 
-#pragma omp parallel for collapse(2) reduction(max:max_c) private(old_x, change)
-        for (int k = 1; k <= O; k++) {
-            for (int j = 1; j <= N; j++) {
-                for (int i = 1 + (k + j) % 2; i <= M; i += 2) {
-                    old_x = x[IX(i, j, k)];
-                    x[IX(i, j, k)] = (x0[IX(i, j, k)] * cRecip) +
-                                     (x[IX(i - 1, j, k)] + x[IX(i + 1, j, k)] +
-                                      x[IX(i, j - 1, k)] + x[IX(i, j + 1, k)] +
-                                      x[IX(i, j, k - 1)] + x[IX(i, j, k + 1)]) * cTimesA;
-                    change = fabs(x[IX(i, j, k)] - old_x);
-                    if (change > max_c) max_c = change;
-                }
-            }
+            CUDA(lin_solve_step<<<blocks, threads, BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE * sizeof(float)>>>(
+                     M, N, O, b, x, x0, cRecip, cTimesA, parity, d_max_change));
         }
 
-#pragma omp parallel for collapse(2) reduction(max:max_c) private(old_x, change)
-        for (int k = 1; k <= O; k++) {
-            for (int j = 1; j <= N; j++) {
-                for (int i = 1 + (k + j + 1) % 2; i <= M; i += 2) {
-                    old_x = x[IX(i, j, k)];
-                    x[IX(i, j, k)] = (x0[IX(i, j, k)] * cRecip) +
-                                     (x[IX(i - 1, j, k)] + x[IX(i + 1, j, k)] +
-                                      x[IX(i, j - 1, k)] + x[IX(i, j + 1, k)] +
-                                      x[IX(i, j, k - 1)] + x[IX(i, j, k + 1)]) * cTimesA;
-                    change = fabs(x[IX(i, j, k)] - old_x);
-                    if (change > max_c) max_c = change;
-                }
-            }
-        }
+        // Copy max_change values back and find global max
+        CUDA(cudaMemcpy(h_max_change, d_max_change, grid_size * sizeof(float), cudaMemcpyDeviceToHost));
+        float max_c = *std::max_element(h_max_change, h_max_change + grid_size);
+
+        // Update boundary conditions (set_bnd equivalent can be implemented here)
         set_bnd(M, N, O, b, x);
-    } while (max_c > tol && ++l < 20);
+
+        if (max_c < tol) break;
+    } while (++l < 20);
+
+    delete[] h_max_change;
+    CUDA(cudaFree(d_max_change));
 }
 
 // Diffusion step (uses implicit method)
@@ -216,7 +252,7 @@ void advect(int M, int N, int O, int b, float *d, float *d0, float *u, float *v,
                 (N + blockDim.y - 1) / blockDim.y,
                 (O + blockDim.z - 1) / blockDim.z);
 
-    advect_kernel<<<blockDim, blocks>>>(dtX, dtY, dtZ, M, N, O, d, d0, u, v, w);
+    CUDA(advect_kernel<<<blockDim, blocks>>>(dtX, dtY, dtZ, M, N, O, d, d0, u, v, w));
 
     set_bnd(M, N, O, b, d);
 }
@@ -275,7 +311,7 @@ void project(int M, int N, int O, float *u, float *v, float *w, float *p, float 
     dim3 blocks((M + blockDim.x - 1) / blockDim.x,
                 (N + blockDim.y - 1) / blockDim.y,
                 (O + blockDim.z - 1) / blockDim.z);
-    project_kernel_1<<<blockDim,blocks>>>(M, N, O, u, v, w, p, div, halfM);
+    CUDA(project_kernel_1<<<blocks, blockDim>>>(M, N, O, u, v, w, p, div, halfM));
 
     set_bnd(M, N, O, 0, div);
     set_bnd(M, N, O, 0, p);
@@ -291,7 +327,7 @@ void project(int M, int N, int O, float *u, float *v, float *w, float *p, float 
     //             }
     //         }
     //     }
-    project_kernel_2<<<blockDim,blocks>>>(M, N, O, u, v, w, p);
+    CUDA(project_kernel_2<<<blockDim, blocks>>>(M, N, O, u, v, w, p));
 
     set_bnd(M, N, O, 1, u);
     set_bnd(M, N, O, 2, v);

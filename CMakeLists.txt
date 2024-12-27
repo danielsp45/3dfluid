@@ -13,6 +13,7 @@ add_executable(fluid_sim
         EventManager.cpp
         fluid_solver.cu
         fluid_solver.h
+        cuda_utils.h
 )
 
 set_target_properties(fluid_sim PROPERTIES

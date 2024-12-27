@@ -2,7 +2,7 @@
 #include "fluid_solver.h"
 #include <iostream>
 #include <vector>
-#include <omp.h>
+#include "cuda_utils.h"
 
 #define SIZE 84
 
@@ -12,7 +12,7 @@
 static int M = SIZE;
 static int N = SIZE;
 static int O = SIZE;
-static float dt = 0.1f;      // Time delta
+static float dt = 0.1f; // Time delta
 static float diff = 0.0001f; // Diffusion constant
 static float visc = 0.0001f; // Viscosity constant
 
@@ -21,34 +21,20 @@ static float *u, *v, *w, *u_prev, *v_prev, *w_prev;
 static float *dens, *dens_prev;
 static float *dens_res;
 
-void checkCUDAError(const char *msg) {
-    cudaError_t err = cudaGetLastError();
-    if (cudaSuccess != err) {
-        std::cerr << "CUDA Error: " << msg << ", " << cudaGetErrorString(err) << ")" << std::endl;
-        exit(-1);
-    }
-}
-
 // Function to allocate simulation data
 int allocate_data() {
     int size = (M + 2) * (N + 2) * (O + 2) * sizeof(float);
 
-    cudaMalloc((void**) &u, size);
-    cudaMalloc((void**) &v, size);
-    cudaMalloc((void**) &w, size);
-    cudaMalloc((void**) &u_prev, size);
-    cudaMalloc((void**) &v_prev, size);
-    cudaMalloc((void**) &w_prev, size);
-    cudaMalloc((void**) &dens, size);
-    cudaMalloc((void**) &dens_prev, size);
-
-    checkCUDAError("Memory allocation failed");
+    CUDA(cudaMalloc((void**) &u, size));
+    CUDA(cudaMalloc((void**) &v, size));
+    CUDA(cudaMalloc((void**) &w, size));
+    CUDA(cudaMalloc((void**) &u_prev, size));
+    CUDA(cudaMalloc((void**) &v_prev, size));
+    CUDA(cudaMalloc((void**) &w_prev, size));
+    CUDA(cudaMalloc((void**) &dens, size));
+    CUDA(cudaMalloc((void**) &dens_prev, size));
 
     dens_res = new float[size];
-    if (!dens_res) {
-        std::cerr << "Memory allocation failed" << std::endl;
-        return 0;
-    }
 
     return 1;
 }
@@ -56,31 +42,27 @@ int allocate_data() {
 // Function to clear the data (set all to zero)
 void clear_data() {
     int size = (M + 2) * (N + 2) * (O + 2) * sizeof(float);
-    
-    cudaMemset(u, 0, size);
-    cudaMemset(v, 0, size);
-    cudaMemset(w, 0, size);
-    cudaMemset(u_prev, 0, size);
-    cudaMemset(v_prev, 0, size);
-    cudaMemset(w_prev, 0, size);
-    cudaMemset(dens, 0, size);
-    cudaMemset(dens_prev, 0, size);
 
-    checkCUDAError("Clear data failed");
+    CUDA(cudaMemset(u, 0, size));
+    CUDA(cudaMemset(v, 0, size));
+    CUDA(cudaMemset(w, 0, size));
+    CUDA(cudaMemset(u_prev, 0, size));
+    CUDA(cudaMemset(v_prev, 0, size));
+    CUDA(cudaMemset(w_prev, 0, size));
+    CUDA(cudaMemset(dens, 0, size));
+    CUDA(cudaMemset(dens_prev, 0, size));
 }
 
 // Free allocated memory
 void free_data() {
-    cudaFree(u);
-    cudaFree(v);
-    cudaFree(w);
-    cudaFree(u_prev);
-    cudaFree(v_prev);
-    cudaFree(w_prev);
-    cudaFree(dens);
-    cudaFree(dens_prev);
-
-    checkCUDAError("Free memory failed");
+    CUDA(cudaFree(u));
+    CUDA(cudaFree(v));
+    CUDA(cudaFree(w));
+    CUDA(cudaFree(u_prev));
+    CUDA(cudaFree(v_prev));
+    CUDA(cudaFree(w_prev));
+    CUDA(cudaFree(dens));
+    CUDA(cudaFree(dens_prev));
 
     delete[] dens_res;
 }
@@ -108,7 +90,7 @@ void apply_events(const std::vector<Event> &events) {
     bool force_updated = false;
     float fx = 0.0f, fy = 0.0f, fz = 0.0f;
 
-    for (const auto &event : events) {
+    for (const auto &event: events) {
         if (event.type == ADD_SOURCE) {
             // Apply density source at the center of the grid
             dens_updated = true;
@@ -124,11 +106,11 @@ void apply_events(const std::vector<Event> &events) {
 
     // dens and uvw are already on the device (a single thread will update both)
     if (dens_updated) {
-        update_dens<<<1, 1>>>(dens, idx, density);
+        CUDA(update_dens<<<1, 1>>>(dens, idx, density));
     }
 
     if (force_updated) {
-        update_uvw<<<1, 1>>>(u, v, w, idx, fx, fy, fz);
+        CUDA(update_uvw<<<1, 1>>>(u, v, w, idx, fx, fy, fz));
     }
 }
 
@@ -158,7 +140,7 @@ void simulate(EventManager &eventManager, int timesteps) {
 
     // Copy the data back to the host
     int size = (M + 2) * (N + 2) * (O + 2) * sizeof(float);
-    cudaMemcpy(dens_res, dens, size, cudaMemcpyDeviceToHost);
+    CUDA(cudaMemcpy(dens_res, dens, size, cudaMemcpyDeviceToHost));
 }
 
 int main() {
@@ -180,7 +162,7 @@ int main() {
     // Print total density at the end of simulation
     float total_density = sum_density();
     std::cout << "Total density after " << timesteps
-              << " timesteps: " << total_density << std::endl;
+            << " timesteps: " << total_density << std::endl;
 
     // Free memory
     free_data();
