@@ -1,5 +1,6 @@
 #include "fluid_solver.h"
 
+#include <cstdint>
 #include <algorithm>
 #include "cuda_utils.h"
 
@@ -252,7 +253,7 @@ void advect(int M, int N, int O, int b, float *d, float *d0, float *u, float *v,
                 (N + blockDim.y - 1) / blockDim.y,
                 (O + blockDim.z - 1) / blockDim.z);
 
-    CUDA(advect_kernel<<<blockDim, blocks>>>(dtX, dtY, dtZ, M, N, O, d, d0, u, v, w));
+    CUDA(advect_kernel<<<blocks, blockDim>>>(dtX, dtY, dtZ, M, N, O, d, d0, u, v, w));
 
     set_bnd(M, N, O, b, d);
 }
@@ -263,15 +264,13 @@ void project_kernel_1(int M, int N, int O, float *u, float *v, float *w, float *
     const uint32_t j = blockIdx.y * blockDim.y + threadIdx.y;
     const uint32_t k = blockIdx.z * blockDim.z + threadIdx.z;
 
-    if (i > M || j > N || k > O) {
-        return;
+    if (i >= 1 && i <= M && j >= 1 && j <= N && k >= 1 && k <= O) {
+        div[IX(i, j, k)] =
+                (u[IX(i + 1, j, k)] - u[IX(i - 1, j, k)] + v[IX(i, j + 1, k)] -
+                v[IX(i, j - 1, k)] + w[IX(i, j, k + 1)] - w[IX(i, j, k - 1)]) *
+                halfM;
+        p[IX(i, j, k)] = 0;
     }
-
-    div[IX(i, j, k)] =
-            (u[IX(i + 1, j, k)] - u[IX(i - 1, j, k)] + v[IX(i, j + 1, k)] -
-             v[IX(i, j - 1, k)] + w[IX(i, j, k + 1)] - w[IX(i, j, k - 1)]) *
-            halfM;
-    p[IX(i, j, k)] = 0;
 }
 
 __global__
@@ -280,13 +279,11 @@ void project_kernel_2(int M, int N, int O, float *u, float *v, float *w, float *
     const uint32_t j = blockIdx.y * blockDim.y + threadIdx.y;
     const uint32_t k = blockIdx.z * blockDim.z + threadIdx.z;
 
-    if (i > M || j > N || k > O) {
-        return;
+    if (i >= 1 && i <= M && j >= 1 && j <= N && k >= 1 && k <= O) {
+        u[IX(i, j, k)] -= 0.5f * (p[IX(i + 1, j, k)] - p[IX(i - 1, j, k)]);
+        v[IX(i, j, k)] -= 0.5f * (p[IX(i, j + 1, k)] - p[IX(i, j - 1, k)]);
+        w[IX(i, j, k)] -= 0.5f * (p[IX(i, j, k + 1)] - p[IX(i, j, k - 1)]);
     }
-
-    u[IX(i, j, k)] -= 0.5f * (p[IX(i + 1, j, k)] - p[IX(i - 1, j, k)]);
-    v[IX(i, j, k)] -= 0.5f * (p[IX(i, j + 1, k)] - p[IX(i, j - 1, k)]);
-    w[IX(i, j, k)] -= 0.5f * (p[IX(i, j, k + 1)] - p[IX(i, j, k - 1)]);
 }
 
 // Projection step to ensure incompressibility (make the velocity field
@@ -327,7 +324,7 @@ void project(int M, int N, int O, float *u, float *v, float *w, float *p, float 
     //             }
     //         }
     //     }
-    CUDA(project_kernel_2<<<blockDim, blocks>>>(M, N, O, u, v, w, p));
+    CUDA(project_kernel_2<<<blocks, blockDim>>>(M, N, O, u, v, w, p));
 
     set_bnd(M, N, O, 1, u);
     set_bnd(M, N, O, 2, v);
