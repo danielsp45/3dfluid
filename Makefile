@@ -1,11 +1,21 @@
 SEARCH ?= 0
+RUI ?= 0
+CHICO ?= 0
 
 CXX = nvcc -std=c++11
 SRCS = main.cu fluid_solver.cu EventManager.cpp
 CFLAGS = -O3
 
 ifeq ($(SEARCH), 1)
-	CFLAGS += -arch=sm_35 -Wno-deprecated-gpu-targets
+	CFLAGS += -arch=sm_35
+endif
+
+ifeq ($(RUI), 1)
+	CFLAGS += -arch=sm_61
+endif
+
+ifeq ($(CHICO), 1)
+	CFLAGS += -arch=sm_75
 endif
 
 all:
