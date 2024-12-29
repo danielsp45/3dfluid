@@ -11,12 +11,4 @@ clean:
 	@echo Done.
 
 copy-to-search:
-	scp -p runcuda.sh $(SRCS) EventManager.h events.txt fluid_solver.h Makefile search:~/3dfluid/
-	ssh search 'cd 3dfluid && module load gcc/7.2.0 && module load cuda/11.3.1 && make'
-
-bench:
-	echo "Starting to benchmark..."
-	srun --partition=cpar --constraint=k20 ./runcuda.sh
-
-bench-search: copy-to-search
-	ssh search 'cd 3dfluid && make bench'
+	scp -p runcuda.sh $(SRCS) EventManager.h events.txt fluid_solver.h cuda_utils.h Makefile search:~/3dfluid/
