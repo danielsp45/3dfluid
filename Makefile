@@ -1,6 +1,12 @@
+SEARCH ?= 0
+
 CXX = nvcc -std=c++11
 SRCS = main.cu fluid_solver.cu EventManager.cpp
 CFLAGS = -O3
+
+ifeq ($(SEARCH), 1)
+	CFLAGS += -arch=sm_35 -Wno-deprecated-gpu-targets
+endif
 
 all:
 	$(CXX) $(CFLAGS) $(SRCS) -o fluid_sim
