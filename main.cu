@@ -19,7 +19,12 @@ static float visc = 0.0001f; // Viscosity constant
 // Fluid simulation arrays
 static float *u, *v, *w, *u_prev, *v_prev, *w_prev;
 static float *dens, *dens_prev;
+
+// Result array
 static float *dens_res;
+
+// Helper arrays
+float *d_max_changes, *d_partials;
 
 // Function to allocate simulation data
 int allocate_data() {
@@ -35,6 +40,9 @@ int allocate_data() {
     CUDA(cudaMalloc((void**) &dens_prev, size));
 
     dens_res = new float[size];
+
+    CUDA(cudaMalloc((void**) &d_max_changes, size));
+    CUDA(cudaMalloc((void**) &d_partials, size));
 
     return 1;
 }
@@ -65,6 +73,9 @@ void free_data() {
     CUDA(cudaFree(dens_prev));
 
     delete[] dens_res;
+
+    CUDA(cudaFree(d_max_changes));
+    CUDA(cudaFree(d_partials));
 }
 
 __global__

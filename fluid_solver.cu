@@ -188,15 +188,12 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
         (O + blockDim.z - 1) / blockDim.z
     );
 
-    // FIXME: These could be allocated once and reused
     int size = (M + 2) * (N + 2) * (O + 2);
-    float *d_max_changes, *d_partials;
-    CUDA(cudaMalloc((void**) &d_max_changes, size * sizeof(float)));
-    CUDA(cudaMalloc((void**) &d_partials, size * sizeof(float)));
+    extern float *d_max_changes, *d_partials;
 
     int l = 0;
     do {
-        cudaMemset(d_max_changes, 0, size * sizeof(float));
+        CUDA(cudaMemset(d_max_changes, 0, size * sizeof(float)));
 
         // Red & Black
         CUDA(lin_solve_kernel<<<blocks, blockDim>>>(M, N, O, x, x0, cRecip, cTimesA, 0, d_max_changes));
@@ -208,9 +205,6 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
 
         if (max_c < tol) break;
     } while (++l < LINEARSOLVERTIMES);
-
-    CUDA(cudaFree(d_max_changes));
-    CUDA(cudaFree(d_partials));
 }
 
 // Diffusion step (uses implicit method)
