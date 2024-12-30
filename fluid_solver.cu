@@ -151,8 +151,8 @@ float reduce_global_max(float *d_max_changes, float *d_partials, int size) {
 }
 
 __global__ void lin_solve_kernel(
-    int M, int N, int O, int b, 
-    float *x, const float *x0, float cRecip, float cTimesA, 
+    int M, int N, int O,
+    float *x, const float *x0, float cRecip, float cTimesA,
     int color, float *d_max_changes
 ) {
     // +1 evicts the need for extra boundary checks, reducing divergence
@@ -198,15 +198,9 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
     do {
         cudaMemset(d_max_changes, 0, size * sizeof(float));
 
-        // Red
-        CUDA(lin_solve_kernel<<<blocks, blockDim>>>(
-            M, N, O, b, x, x0, cRecip, cTimesA, 0, d_max_changes
-        ));
-
-        // Black
-        CUDA(lin_solve_kernel<<<blocks, blockDim>>>(
-            M, N, O, b, x, x0, cRecip, cTimesA, 1, d_max_changes
-        ));
+        // Red & Black
+        CUDA(lin_solve_kernel<<<blocks, blockDim>>>(M, N, O, x, x0, cRecip, cTimesA, 0, d_max_changes));
+        CUDA(lin_solve_kernel<<<blocks, blockDim>>>(M, N, O, x, x0, cRecip, cTimesA, 1, d_max_changes));
 
         max_c = reduce_global_max(d_max_changes, d_partials, size);
 
