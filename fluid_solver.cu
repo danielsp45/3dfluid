@@ -104,13 +104,15 @@ __global__ void lin_solve_step(int M, int N, int O, int b, float *x, const float
     int tid = threadIdx.x + threadIdx.y * blockDim.x + threadIdx.z * blockDim.x * blockDim.y;
 
     // +1 evicts the need for extra boundary checks, reducing divergence
-    int i = blockIdx.x * blockDim.x + threadIdx.x + 1;
     int j = blockIdx.y * blockDim.y + threadIdx.y + 1;
     int k = blockIdx.z * blockDim.z + threadIdx.z + 1;
 
+    // By using parity, we can avoid checking if the thread is out of bounds 
+    int i = 2 * (blockIdx.x * blockDim.x + threadIdx.x) + 1 + (j + k + parity) % 2;
+
     float local_max_change = 0.0f;
 
-    if (i <= M && j <= N && k <= O && (i + j + k) % 2 == parity) {
+    if (i <= M && j <= N && k <= O) {
         int idx = IX(i, j, k);
         float old_x = x[idx];
         x[idx] = (x0[idx] * cRecip) +
@@ -142,7 +144,7 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
     float tol = 1e-7, *d_max_change, *h_max_change;
 
     const int BLOCK_SIZE = 8;
-    int grid_size = (M + BLOCK_SIZE - 1) / BLOCK_SIZE * (N + BLOCK_SIZE - 1) / BLOCK_SIZE * (O + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    int grid_size = ((M / 2) + BLOCK_SIZE - 1) / BLOCK_SIZE * (N + BLOCK_SIZE - 1) / BLOCK_SIZE * (O + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
     CUDA(cudaMalloc(&d_max_change, grid_size * sizeof(float)));
     h_max_change = new float[grid_size];
@@ -152,7 +154,7 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
 
     dim3 threads(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
     dim3 blocks(
-        (M + BLOCK_SIZE - 1) / BLOCK_SIZE,
+        ((M / 2) + BLOCK_SIZE - 1) / BLOCK_SIZE,
         (N + BLOCK_SIZE - 1) / BLOCK_SIZE,
         (O + BLOCK_SIZE - 1) / BLOCK_SIZE
     );
