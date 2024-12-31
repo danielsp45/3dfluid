@@ -134,19 +134,16 @@ float reduce_global_max(float *d_max_changes, float *d_partials, int size) {
     int threads_per_block = 256;
 
     // We will process 8 elements per thread
+    // Effectively reducing kernel launching overhead
     int blocks = (size + (threads_per_block * 8) - 1) / (threads_per_block * 8);
 
-    while (blocks > 1) {
-        reduce_block_max<<<blocks, threads_per_block, threads_per_block * sizeof(float)>>>(d_max_changes, d_partials, size);
+    reduce_block_max<<<blocks, threads_per_block, threads_per_block * sizeof(float)>>>(d_max_changes, d_partials, size);
 
+    while (blocks > 1) {
         size = blocks;
         blocks = (blocks + (threads_per_block * 8) - 1) / (threads_per_block * 8);
-
-        SWAP(d_max_changes, d_partials);
+        reduce_block_max<<<blocks, threads_per_block, threads_per_block * sizeof(float)>>>(d_partials, d_partials, size);
     }
-
-    // Last block is reduced to a single value
-    reduce_block_max<<<1, threads_per_block, threads_per_block * sizeof(float)>>>(d_max_changes, d_partials, size);
 
     float max_c;
     CUDA(cudaMemcpy(&max_c, d_partials, sizeof(float), cudaMemcpyDeviceToHost));
