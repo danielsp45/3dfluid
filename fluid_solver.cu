@@ -106,14 +106,16 @@ void reduce_block_max(float *input, float *output, int n) {
     int tid = threadIdx.x;
     int idx = blockIdx.x * (blockDim.x * 8) + tid;
 
-    float max_change = 0.0f;
-    for (int i = 0; i < 8; i++) {
-        if (idx + i * blockDim.x < n) {
-            max_change = fmaxf(max_change, input[idx + i * blockDim.x]);
-        }
-    }
+    sdata[tid] = 0.0f;
 
-    sdata[tid] = max_change;
+    // First comparison during global load
+    for (int i = 0; i < 8; i++) {
+        if (idx < n) {
+            sdata[tid] = fmaxf(sdata[tid], input[idx]);
+        }
+
+        idx += blockDim.x;
+    }
     __syncthreads();
 
     for (int s = blockDim.x / 2; s > 0; s >>= 1) {
@@ -130,6 +132,8 @@ void reduce_block_max(float *input, float *output, int n) {
 
 float reduce_global_max(float *d_max_changes, float *d_partials, int size) {
     int threads_per_block = 256;
+
+    // We will process 8 elements per thread
     int blocks = (size + (threads_per_block * 8) - 1) / (threads_per_block * 8);
 
     while (blocks > 1) {
