@@ -81,18 +81,27 @@ void set_bnd(int M, int N, int O, int b, float *x) {
     float x_signal = (b == 3 || b == 1 || b == 2) ? -1.0f : 1.0f;
 
     // One kernel per boundary helps reducing thread divergence
-    dim3 blockDim(8, 8);
+    dim3 blockDim(256, 1);
 
     // Set z boundaries (M x N)
-    dim3 blocksZ((M + blockDim.x - 1) / blockDim.x, (N + blockDim.y - 1) / blockDim.y);
+    dim3 blocksZ(
+        (M + blockDim.x - 1) / blockDim.x,
+        (N + blockDim.y - 1) / blockDim.y
+    );
     CUDA(set_bnd_x_kernel<<<blocksZ, blockDim>>>(M, N, O, x, x_signal));
 
     // Set y boundaries (M x O)
-    dim3 blocksY((M + blockDim.x - 1) / blockDim.x, (O + blockDim.y - 1) / blockDim.y);
+    dim3 blocksY(
+        (M + blockDim.x - 1) / blockDim.x,
+        (O + blockDim.y - 1) / blockDim.y
+    );
     CUDA(set_bnd_y_kernel<<<blocksY, blockDim>>>(M, N, O, x, x_signal));
 
     // Set x boundaries (N x O)
-    dim3 blocksX((N + blockDim.x - 1) / blockDim.x, (O + blockDim.y - 1) / blockDim.y);
+    dim3 blocksX(
+        (N + blockDim.x - 1) / blockDim.x,
+        (O + blockDim.y - 1) / blockDim.y
+    );
     CUDA(set_bnd_z_kernel<<<blocksX, blockDim>>>(M, N, O, x, x_signal));
 
     // Set corners (1 x 1)
@@ -114,12 +123,22 @@ void reduce_block_max(float *input, float *output, int n) {
             sdata[tid] = fmaxf(sdata[tid], input[idx]);
         }
 
+        // Strided access to improve memory coalescing
+        // avoiding overlaps between threads
         idx += blockDim.x;
     }
+
+    // After this sync point, all threads (total of blockDim.x)
+    // will have their own max of 8 elements
     __syncthreads();
 
+    // Reversed-tree reduction (sequential addressing)
+    // starting with half of the threads (active threads)
+    // we combine the results of the first half with the idle threads
+    // until we have only one thread left
     for (int s = blockDim.x / 2; s > 0; s >>= 1) {
         if (tid < s) {
+            // sdata[tid + s] corresponds to the idle thread
             sdata[tid] = fmaxf(sdata[tid], sdata[tid + s]);
         }
         __syncthreads();
@@ -140,11 +159,16 @@ float reduce_global_max(float *d_max_changes, float *d_partials, int size) {
     reduce_block_max<<<blocks, threads_per_block, threads_per_block * sizeof(float)>>>(d_max_changes, d_partials, size);
 
     while (blocks > 1) {
+        // The final size of the array will be 1 (one global max)
         size = blocks;
         blocks = (blocks + (threads_per_block * 8) - 1) / (threads_per_block * 8);
+
+        // After completion d_partials[k] (for k in [0..blocks - 1])
+        // will contain the max per block
         reduce_block_max<<<blocks, threads_per_block, threads_per_block * sizeof(float)>>>(d_partials, d_partials, size);
     }
 
+    // Global max is stored at d_partials[0]
     float max_c;
     CUDA(cudaMemcpy(&max_c, d_partials, sizeof(float), cudaMemcpyDeviceToHost));
 
@@ -160,7 +184,7 @@ __global__ void lin_solve_kernel(
     int j = blockIdx.y * blockDim.y + threadIdx.y + 1;
     int k = blockIdx.z * blockDim.z + threadIdx.z + 1;
 
-    // By using the color, we can avoid checking if the thread is out of bounds
+    // By using this full indexing, we can avoid the need for extra boundary checks
     int i = 2 * (blockIdx.x * blockDim.x + threadIdx.x) + 1 + (j + k + color) % 2;
 
     if (i <= M && j <= N && k <= O) {
@@ -182,8 +206,9 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
     float cRecip = 1.0f / c;
     float cTimesA = a * cRecip;
 
-    dim3 blockDim(8, 8, 8);
+    dim3 blockDim(32, 8, 1);
     dim3 blocks(
+        // M is halved because we will be jumping 2 elements at a time during the kernel
         ((M / 2) + blockDim.x - 1) / blockDim.x,
         (N + blockDim.y - 1) / blockDim.y,
         (O + blockDim.z - 1) / blockDim.z
@@ -253,7 +278,7 @@ void advect_kernel(float dtX, float dtY, float dtZ, int M, int N, int O, float *
 void advect(int M, int N, int O, int b, float *d, float *d0, float *u, float *v, float *w, float dt) {
     float dtX = dt * M, dtY = dt * N, dtZ = dt * O;
 
-    dim3 blockDim(8, 8, 8);
+    dim3 blockDim(32, 8, 1);
     dim3 blocks(
         (M + blockDim.x - 1) / blockDim.x,
         (N + blockDim.y - 1) / blockDim.y,
@@ -300,7 +325,7 @@ void project_kernel_2(int M, int N, int O, float *u, float *v, float *w, float *
 void project(int M, int N, int O, float *u, float *v, float *w, float *p, float *div) {
     const float halfM = -0.5f / MAX(MAX(M, N), O);
 
-    dim3 blockDim(8, 8, 8);
+    dim3 blockDim(32, 8, 1);
     dim3 blocks(
         (M + blockDim.x - 1) / blockDim.x,
         (N + blockDim.y - 1) / blockDim.y,
