@@ -181,7 +181,7 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
     float cRecip = 1.0f / c;
     float cTimesA = a * cRecip;
 
-    dim3 blockDim(16, 16, 4);
+    dim3 blockDim(8, 8, 8);
     dim3 blocks(
         ((M / 2) + blockDim.x - 1) / blockDim.x,
         (N + blockDim.y - 1) / blockDim.y,
