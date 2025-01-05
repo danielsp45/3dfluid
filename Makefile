@@ -32,10 +32,10 @@ all:
 	$(CXX) $(CFLAGS) $(SRCS) -o fluid_sim
 
 run:
-	sbatch --partition day --constraint=k20 --ntasks=1 --time=2:00 ./runcuda.sh
+	sbatch --partition day --constraint=k20 --ntasks=1 --time=2:00 --exclusive ./runcuda.sh
 
 rrun:
-	srun --partition day --constraint=k20 --ntasks=1 --time=2:00 ./runcuda.sh
+	srun --partition day --constraint=k20 --ntasks=1 --time=2:00 --exclusive ./runcuda.sh
 
 clean:
 	@rm -f fluid_sim* gmon.out fluid_solver.s main.gprof output.* prof_md

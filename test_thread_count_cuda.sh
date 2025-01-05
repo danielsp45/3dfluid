@@ -47,6 +47,7 @@ for index in "${!BLOCK_DIMS[@]}"; do
     # Clean previous builds
     make clean
 
+    echo "Compiling..."
     # Compile the CUDA code with current block dimensions and executable name
     make LIN_SOLVE_BLOCK_X=$BLOCK_X LIN_SOLVE_BLOCK_Y=$BLOCK_Y LIN_SOLVE_BLOCK_Z=$BLOCK_Z THREADS_PER_BLOCK=$THREADS_PER_BLOCK
 
