@@ -14,6 +14,22 @@
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
+#ifndef THREADS_PER_BLOCK
+#define THREADS_PER_BLOCK 256
+#endif
+
+#ifndef LIN_SOLVE_BLOCK_X
+#define LIN_SOLVE_BLOCK_X 32
+#endif
+
+#ifndef LIN_SOLVE_BLOCK_Y
+#define LIN_SOLVE_BLOCK_Y 8
+#endif
+
+#ifndef LIN_SOLVE_BLOCK_Z
+#define LIN_SOLVE_BLOCK_Z 1
+#endif
+
 #define LINEARSOLVERTIMES 20
 
 // Add sources (density or velocity)
@@ -28,10 +44,9 @@ void add_source_kernel(int size, float *x, float *s, float dt) {
 
 void add_source(int M, int N, int O, float *x, float *s, float dt) {
     int size = (M + 2) * (N + 2) * (O + 2);
-    int threads_per_block = 256;
-    int blocks = (size + threads_per_block - 1) / threads_per_block;
+    int blocks = (size + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
 
-    CUDA(add_source_kernel<<<blocks, threads_per_block>>>(size, x, s, dt));
+    CUDA(add_source_kernel<<<blocks, THREADS_PER_BLOCK>>>(size, x, s, dt));
 }
 
 __global__
@@ -81,7 +96,7 @@ void set_bnd(int M, int N, int O, int b, float *x) {
     float x_signal = (b == 3 || b == 1 || b == 2) ? -1.0f : 1.0f;
 
     // One kernel per boundary helps reducing thread divergence
-    dim3 blockDim(256, 1);
+    dim3 blockDim(THREADS_PER_BLOCK, 1);
 
     // Set z boundaries (M x N)
     dim3 blocksZ(
@@ -165,7 +180,8 @@ float reduce_global_max(float *d_max_changes, float *d_partials, int size) {
 
         // After completion d_partials[k] (for k in [0..blocks - 1])
         // will contain the max per block
-        reduce_block_max<<<blocks, threads_per_block, threads_per_block * sizeof(float)>>>(d_partials, d_partials, size);
+        reduce_block_max<<<blocks, threads_per_block, threads_per_block * sizeof(float)>>
+                >(d_partials, d_partials, size);
     }
 
     // Global max is stored at d_partials[0]
@@ -206,7 +222,7 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
     float cRecip = 1.0f / c;
     float cTimesA = a * cRecip;
 
-    dim3 blockDim(32, 8, 1);
+    dim3 blockDim(LIN_SOLVE_BLOCK_X, LIN_SOLVE_BLOCK_Y, LIN_SOLVE_BLOCK_Z);
     dim3 blocks(
         // M is halved because we will be jumping 2 elements at a time during the kernel
         ((M / 2) + blockDim.x - 1) / blockDim.x,
@@ -241,7 +257,8 @@ void diffuse(int M, int N, int O, int b, float *x, float *x0, float diff, float 
 }
 
 __global__
-void advect_kernel(float dtX, float dtY, float dtZ, int M, int N, int O, float *d, float *d0, float *u, float *v, float *w) {
+void advect_kernel(float dtX, float dtY, float dtZ, int M, int N, int O, float *d, float *d0, float *u, float *v,
+                   float *w) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
     int k = blockIdx.z * blockDim.z + threadIdx.z;
@@ -278,7 +295,7 @@ void advect_kernel(float dtX, float dtY, float dtZ, int M, int N, int O, float *
 void advect(int M, int N, int O, int b, float *d, float *d0, float *u, float *v, float *w, float dt) {
     float dtX = dt * M, dtY = dt * N, dtZ = dt * O;
 
-    dim3 blockDim(32, 8, 1);
+    dim3 blockDim(LIN_SOLVE_BLOCK_X, LIN_SOLVE_BLOCK_Y, LIN_SOLVE_BLOCK_Z);
     dim3 blocks(
         (M + blockDim.x - 1) / blockDim.x,
         (N + blockDim.y - 1) / blockDim.y,
@@ -300,7 +317,7 @@ void project_kernel_1(int M, int N, int O, float *u, float *v, float *w, float *
     if (i <= M && j <= N && k <= O) {
         div[IX(i, j, k)] =
                 (u[IX(i + 1, j, k)] - u[IX(i - 1, j, k)] + v[IX(i, j + 1, k)] -
-                v[IX(i, j - 1, k)] + w[IX(i, j, k + 1)] - w[IX(i, j, k - 1)]) *
+                 v[IX(i, j - 1, k)] + w[IX(i, j, k + 1)] - w[IX(i, j, k - 1)]) *
                 halfM;
         p[IX(i, j, k)] = 0;
     }
@@ -325,7 +342,7 @@ void project_kernel_2(int M, int N, int O, float *u, float *v, float *w, float *
 void project(int M, int N, int O, float *u, float *v, float *w, float *p, float *div) {
     const float halfM = -0.5f / MAX(MAX(M, N), O);
 
-    dim3 blockDim(32, 8, 1);
+    dim3 blockDim(LIN_SOLVE_BLOCK_X, LIN_SOLVE_BLOCK_Y, LIN_SOLVE_BLOCK_Z);
     dim3 blocks(
         (M + blockDim.x - 1) / blockDim.x,
         (N + blockDim.y - 1) / blockDim.y,
