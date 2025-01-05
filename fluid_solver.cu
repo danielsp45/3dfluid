@@ -14,24 +14,6 @@
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
-#ifndef THREADS_PER_BLOCK
-#define THREADS_PER_BLOCK 256
-#endif
-
-#ifndef LIN_SOLVE_BLOCK_X
-#define LIN_SOLVE_BLOCK_X 32
-#endif
-
-#ifndef LIN_SOLVE_BLOCK_Y
-#define LIN_SOLVE_BLOCK_Y 8
-#endif
-
-#ifndef LIN_SOLVE_BLOCK_Z
-#define LIN_SOLVE_BLOCK_Z 1
-#endif
-
-#define LINEARSOLVERTIMES 20
-
 // Add sources (density or velocity)
 __global__
 void add_source_kernel(int size, float *x, float *s, float dt) {
