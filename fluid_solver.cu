@@ -175,7 +175,7 @@ float reduce_global_max(float *d_max_changes, float *d_partials, int size) {
 __global__ void lin_solve_kernel(
     int M, int N, int O,
     float *x, const float *x0, float cRecip, float cTimesA,
-    int color, float *d_max_changes
+    int color, bool *d_converged, float tol
 ) {
     // +1 evicts the need for extra boundary checks, reducing divergence
     int j = blockIdx.y * blockDim.y + threadIdx.y + 1;
@@ -193,12 +193,12 @@ __global__ void lin_solve_kernel(
                   x[IX(i, j - 1, k)] + x[IX(i, j + 1, k)] +
                   x[IX(i, j, k - 1)] + x[IX(i, j, k + 1)]) * cTimesA;
 
-        d_max_changes[idx] = fabsf(x[idx] - old_x);
+        if (fabsf(x[idx] - old_x) > tol) *d_converged = false;
     }
 }
 
 void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c) {
-    float tol = 1e-7, max_c;
+    float tol = 1e-7;
 
     float cRecip = 1.0f / c;
     float cTimesA = a * cRecip;
@@ -211,22 +211,22 @@ void lin_solve(int M, int N, int O, int b, float *x, float *x0, float a, float c
         (O + blockDim.z - 1) / blockDim.z
     );
 
-    int size = (M + 2) * (N + 2) * (O + 2);
-    extern float *d_max_changes, *d_partials;
+    bool h_converged;
+    extern bool *d_converged;
 
     int l = 0;
     do {
-        CUDA(cudaMemset(d_max_changes, 0, size * sizeof(float)));
+        cudaMemset(d_converged, true, sizeof(bool));
 
         // Red & Black
-        CUDA(lin_solve_kernel<<<blocks, blockDim>>>(M, N, O, x, x0, cRecip, cTimesA, 0, d_max_changes));
-        CUDA(lin_solve_kernel<<<blocks, blockDim>>>(M, N, O, x, x0, cRecip, cTimesA, 1, d_max_changes));
+        CUDA(lin_solve_kernel<<<blocks, blockDim>>>(M, N, O, x, x0, cRecip, cTimesA, 0, d_converged, tol));
+        CUDA(lin_solve_kernel<<<blocks, blockDim>>>(M, N, O, x, x0, cRecip, cTimesA, 1, d_converged, tol));
 
-        max_c = reduce_global_max(d_max_changes, d_partials, size);
+        cudaMemcpy(&h_converged, d_converged, sizeof(bool), cudaMemcpyDeviceToHost);
 
         set_bnd(M, N, O, b, x);
 
-        if (max_c < tol) break;
+        if (h_converged) break;
     } while (++l < LINEARSOLVERTIMES);
 }
 

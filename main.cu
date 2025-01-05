@@ -23,8 +23,8 @@ static float *dens, *dens_prev;
 // Result array
 static float *dens_res;
 
-// Helper arrays
-float *d_max_changes, *d_partials;
+// Helper pointer
+bool *d_converged;
 
 // Function to allocate simulation data
 int allocate_data() {
@@ -41,8 +41,7 @@ int allocate_data() {
 
     dens_res = new float[size];
 
-    CUDA(cudaMalloc((void**) &d_max_changes, size));
-    CUDA(cudaMalloc((void**) &d_partials, size));
+    CUDA(cudaMalloc((void**) &d_converged, sizeof(bool)));
 
     return 1;
 }
@@ -74,8 +73,7 @@ void free_data() {
 
     delete[] dens_res;
 
-    CUDA(cudaFree(d_max_changes));
-    CUDA(cudaFree(d_partials));
+    CUDA(cudaFree(d_converged));
 }
 
 __global__
