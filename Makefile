@@ -16,9 +16,9 @@ endif
 
 # Default block dimensions
 LIN_SOLVE_BLOCK_X ?= 32
-LIN_SOLVE_BLOCK_Y ?= 8
+LIN_SOLVE_BLOCK_Y ?= 4
 LIN_SOLVE_BLOCK_Z ?= 1
-THREADS_PER_BLOCK ?= 256
+THREADS_PER_BLOCK ?= 128
 
 # Append block dimension macros to CFLAGS
 CFLAGS += -D LIN_SOLVE_BLOCK_X=$(LIN_SOLVE_BLOCK_X) \
