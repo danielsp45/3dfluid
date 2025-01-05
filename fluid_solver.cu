@@ -162,8 +162,7 @@ float reduce_global_max(float *d_max_changes, float *d_partials, int size) {
 
         // After completion d_partials[k] (for k in [0..blocks - 1])
         // will contain the max per block
-        reduce_block_max<<<blocks, threads_per_block, threads_per_block * sizeof(float)>>
-                >(d_partials, d_partials, size);
+        reduce_block_max<<<blocks, threads_per_block, threads_per_block * sizeof(float)>>>(d_partials, d_partials, size);
     }
 
     // Global max is stored at d_partials[0]
