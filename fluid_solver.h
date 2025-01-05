@@ -6,7 +6,7 @@ void dens_step(int M, int N, int O, float *x, float *x0, float *u, float *v, flo
 void vel_step(int M, int N, int O, float *u, float *v, float *w, float *u0, float *v0, float *w0, float visc, float dt);
 
 #ifndef THREADS_PER_BLOCK
-#define THREADS_PER_BLOCK 256
+#define THREADS_PER_BLOCK 128
 #endif
 
 #ifndef LIN_SOLVE_BLOCK_X
