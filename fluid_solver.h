@@ -14,7 +14,7 @@ void vel_step(int M, int N, int O, float *u, float *v, float *w, float *u0, floa
 #endif
 
 #ifndef LIN_SOLVE_BLOCK_Y
-#define LIN_SOLVE_BLOCK_Y 8
+#define LIN_SOLVE_BLOCK_Y 4
 #endif
 
 #ifndef LIN_SOLVE_BLOCK_Z
